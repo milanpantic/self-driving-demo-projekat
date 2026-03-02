@@ -10,13 +10,10 @@ import pandas as pd
 import os
 import random
 
-# -------------------------
-# AUGMENTACIJE
-# -------------------------
 
 def random_brightness(img):
     hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-    factor = 0.6 + np.random.rand() * 0.8  # [0.6 – 1.4]
+    factor = 0.6 + np.random.rand() * 0.8   
     hsv[:, :, 2] = np.clip(hsv[:, :, 2] * factor, 0, 255)
     return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
 
@@ -36,10 +33,6 @@ def augment(img):
     if np.random.rand() < 0.5:
         img = random_shadow(img)
     return img
-
-# -------------------------
-# SEKVENCIALNA AUGMENTACIJA DATASETA
-# -------------------------
 
 def augment_dataset_sequential(
     input_csv,
@@ -63,10 +56,10 @@ def augment_dataset_sequential(
     for i, row in df.iterrows():
         img_path = row[0]
 
-        # 1️⃣ original
+         
         new_rows.append(row.tolist())
 
-        # 2️⃣ augmentirana verzija (ako je izabrana)
+         
         if i in aug_indices:
             img = cv2.imread(img_path)
             if img is None:
@@ -81,7 +74,7 @@ def augment_dataset_sequential(
             cv2.imwrite(new_path, cv2.cvtColor(aug_img, cv2.COLOR_RGB2BGR))
 
             aug_row = row.tolist()
-            aug_row[0] = new_path  # samo putanja
+            aug_row[0] = new_path   
 
             new_rows.append(aug_row)
 
@@ -232,10 +225,10 @@ def reduce_straight_driving(
     zero_df = df[zero_mask]
 
     keep_n = int(len(zero_df) * zero_keep_ratio)
-    zero_df_reduced = zero_df.iloc[:keep_n]  # bez shuffle
+    zero_df_reduced = zero_df.iloc[:keep_n]   
 
     new_df = pd.concat([non_zero_df, zero_df_reduced], axis=0)
-    new_df = new_df.sort_index()  # zadrži redosled vožnje
+    new_df = new_df.sort_index()   
 
     print("Pre:", len(df))
     print("Posle:", len(new_df))
