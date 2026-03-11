@@ -15,7 +15,7 @@ BATCH_SIZE = 32
 EPOCHS = 20
 IMG_HEIGHT = 66
 IMG_WIDTH = 200
-SEQ_LENGTH = 5  
+SEQ_LENGTH = 4
 
 def load_image(path):
     img = cv2.imread(path)
@@ -59,23 +59,24 @@ def sequence_generator(image_paths, steering, batch_size, seq_length):
                 
             yield np.array(X_batch), np.array(y_batch)
 
-def build_cnn_lstm(seq_length):
+def build_basic_cnn_lstm(seq_length):
     input_layer = Input(shape=(seq_length, IMG_HEIGHT, IMG_WIDTH, 3))
-     
-    x = TimeDistributed(Conv2D(16, (5, 5), strides=(2, 2), activation='elu'))(input_layer)
-    x = TimeDistributed(BatchNormalization())(x)
-    x = TimeDistributed(Conv2D(24, (5, 5), strides=(2, 2), activation='elu'))(x)
-    x = TimeDistributed(Conv2D(32, (3, 3), activation='elu'))(x)
+
+    x = TimeDistributed(Conv2D(16, (5, 5), strides=(2, 2), activation='relu'))(input_layer)
+    x = TimeDistributed(Conv2D(32, (3, 3), strides=(2, 2), activation='relu'))(x)
     x = TimeDistributed(Flatten())(x)
 
-    x = LSTM(64, return_sequences=False, dropout=0.3)(x)
+    x = LSTM(64, return_sequences=False)(x)
 
-    x = Dense(32, activation='elu')(x)
-    x = Dropout(0.5)(x)
-    output = Dense(1)(x)  
+    x = Dropout(0.3)(x)
+
+    x = Dense(32, activation='relu')(x)
+    
+    output = Dense(1, activation='tanh')(x)
 
     model = Model(inputs=input_layer, outputs=output)
-    model.compile(optimizer=Adam(learning_rate=1e-4), loss='mse')
+    model.compile(optimizer=Adam(learning_rate=1e-3), loss='mse')
+    
     return model
 
 def detect_lane_change(steering_history, threshold=0.12):
@@ -95,7 +96,7 @@ def main():
     train_gen = sequence_generator(X_train_paths, y_train, BATCH_SIZE, SEQ_LENGTH)
     val_gen = sequence_generator(X_val_paths, y_val, BATCH_SIZE, SEQ_LENGTH)
 
-    model = build_cnn_lstm(SEQ_LENGTH)
+    model = build_basic_cnn_lstm(SEQ_LENGTH)
     
     checkpoint = ModelCheckpoint("best_model.h5", monitor="val_loss", save_best_only=True)
     early_stop = EarlyStopping(monitor="val_loss", patience=4, restore_best_weights=True)

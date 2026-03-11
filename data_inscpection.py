@@ -10,7 +10,6 @@ import pandas as pd
 import os
 import random
 
-
 def random_brightness(img):
     hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
     factor = 0.6 + np.random.rand() * 0.8   
