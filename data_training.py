@@ -10,7 +10,7 @@ from tensorflow.keras.layers import (Conv2D, Dense, Flatten, Dropout, Input,
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 
-CSV_PATH = "complete_dataset/merged/driving_log_merged.csv"
+CSV_PATH = "complete_dataset/merged/driving_log_augmented.csv"
 BATCH_SIZE = 32
 EPOCHS = 20
 IMG_HEIGHT = 66

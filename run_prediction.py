@@ -6,7 +6,7 @@ import os
 import csv
 
 MODEL_PATH = "best_model.h5"
-CSV_PATH = "complete_dataset/merged/driving_log_merged.csv"
+CSV_PATH = "complete_dataset/merged/driving_log_augmented.csv"
 OUTPUT_VIDEO_NAME = "rezultat_voznje_final.mp4"
 OUTPUT_CSV_NAME = "rezultati_predikcije.csv"
 SEQ_LENGTH = 4
