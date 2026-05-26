@@ -1,0 +1,15 @@
+importlib-metadata==4.6.4
+keras==2.15.0
+Markdown==3.5.1
+matplotlib==3.10.7
+ml-dtypes==0.2.0
+numpy==1.26.2
+opencv-python==4.11.0.86
+pandas==2.3.3
+scikit-image==0.25.2
+scikit-learn==1.7.2
+tensorboard==2.15.1
+tensorboard-data-server==0.7.2
+tensorflow==2.15.0
+tensorflow-estimator==2.15.0
+tensorflow-io-gcs-filesystem==0.34.0
