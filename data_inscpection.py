@@ -128,15 +128,6 @@ def inspect_dataset(csv_path, plot_histogram=True):
     print(f"Pravo (==0): {n_zero}")
     print(f"Desno (>0): {n_right}")
 
-    if plot_histogram:
-        plt.figure(figsize=(8,5))
-        plt.hist(steering, bins=50, color='skyblue', edgecolor='black')
-        plt.title(f"Distribucija ugla upravljanja: {csv_path}")
-        plt.xlabel("Steering angle")
-        plt.ylabel("Broj uzoraka")
-        plt.grid(True)
-        plt.show()
-
     return df
 
 def reduce_zero(csv_path, steering_col=3):
@@ -258,8 +249,8 @@ def main():
     input_csv_jungle = "complete_dataset/self_driving_car_dataset_jungle/driving_log.csv"
     output_csv_jungle = "complete_dataset/self_driving_car_dataset_jungle/driving_log_fixed.csv"
 
-    input_csv_lake = "complete_dataset/self_driving_car_dataset_make/driving_log.csv"
-    output_csv_lake = "complete_dataset/self_driving_car_dataset_make/driving_log_fixed.csv"
+    input_csv_lake = "complete_dataset/self_driving_car_dataset/driving_log.csv"
+    output_csv_lake = "complete_dataset/self_driving_car_dataset/driving_log_fixed.csv"
     
     df = fix_image_paths(
         csv_path=input_csv_jungle,
@@ -281,15 +272,15 @@ def main():
     )
 
     balance_make_dataset(
-    csv_path="complete_dataset/self_driving_car_dataset_make/driving_log_fixed.csv",
-    img_root="complete_dataset/self_driving_car_dataset_make",
-    out_csv="complete_dataset/self_driving_car_dataset_make/driving_log_balanced.csv",
-    out_img_dir="complete_dataset/self_driving_car_dataset_make/mirrored",
+    csv_path="complete_dataset/self_driving_car_dataset/driving_log_fixed.csv",
+    img_root="complete_dataset/self_driving_car_dataset",
+    out_csv="complete_dataset/self_driving_car_dataset/driving_log_balanced.csv",
+    out_img_dir="complete_dataset/self_driving_car_dataset/mirrored",
     keep_zero_ratio=0.25
     )
     
     inspect_dataset("complete_dataset/self_driving_car_dataset_jungle/driving_log_reduced.csv")
-    inspect_dataset("complete_dataset/self_driving_car_dataset_make/driving_log_balanced.csv")
+    inspect_dataset("complete_dataset/self_driving_car_dataset/driving_log_balanced.csv")
 
     merged_csv = "complete_dataset/merged/driving_log_merged.csv"
     os.makedirs("complete_dataset/merged", exist_ok=True)
@@ -297,7 +288,7 @@ def main():
     merge_datasets(
     csv_paths=[
         "complete_dataset/self_driving_car_dataset_jungle/driving_log_reduced.csv",
-        "complete_dataset/self_driving_car_dataset_make/driving_log_balanced.csv"
+        "complete_dataset/self_driving_car_dataset/driving_log_balanced.csv"
     ],
     out_csv=merged_csv
     )
