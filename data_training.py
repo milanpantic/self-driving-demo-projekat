@@ -1,4 +1,12 @@
 import math
+import os
+import time
+
+
+USE_GPU = True
+
+if not USE_GPU:
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 import cv2
 import numpy as np
@@ -195,6 +203,8 @@ def evaluate_predictions(model, generator, steering, sequence_groups, seq_length
 
 def main():
     np.random.seed(SEED)
+    device_name = "GPU" if USE_GPU else "CPU"
+    print(f"Trening se pokreće na: {device_name}")
     train_paths, train_steering, train_groups = load_dataset(TRAIN_CSV_PATH)
     val_paths, val_steering, val_groups = load_dataset(VAL_CSV_PATH)
     test_paths, test_steering, test_groups = load_dataset(TEST_CSV_PATH)
@@ -224,7 +234,8 @@ def main():
     checkpoint = ModelCheckpoint("best_model.h5", monitor="val_loss", save_best_only=True)
     early_stop = EarlyStopping(monitor="val_loss", patience=10, restore_best_weights=True)
 
-    model.fit(
+    training_started_at = time.perf_counter()
+    history = model.fit(
         train_gen,
         steps_per_epoch=math.ceil(train_count / BATCH_SIZE),
         validation_data=val_gen,
@@ -232,6 +243,13 @@ def main():
         epochs=EPOCHS,
         callbacks=[checkpoint, early_stop],
     )
+    training_duration = time.perf_counter() - training_started_at
+    completed_epochs = len(history.history["loss"])
+    print(
+        f"Trajanje treninga ({device_name}): "
+        f"{training_duration:.1f} s ({training_duration / 60:.2f} min)"
+    )
+    print(f"Prosečno po epohi: {training_duration / completed_epochs:.1f} s")
 
     evaluate_predictions(
         model,

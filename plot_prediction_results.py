@@ -5,6 +5,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.ticker import MultipleLocator
 
 
 DEFAULT_CSV_PATH = "rezultati_predikcije.csv"
@@ -42,6 +43,8 @@ def create_prediction_plot(
     axis.set_title("Stvarni i predviđeni ugao kroz vreme")
     axis.set_xlabel("Vreme videa (s)")
     axis.set_ylabel("Ugao: levo (−) / desno (+)")
+    axis.xaxis.set_major_locator(MultipleLocator(1))
+    axis.tick_params(axis="x", labelrotation=45, labelsize=8)
     axis.grid(alpha=0.25)
     axis.legend()
 
