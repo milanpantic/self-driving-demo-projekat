@@ -4,3 +4,5 @@ complete_dataset/
 __pycache__/
 *.mp4
 *.csv
+*.png
+*.txt

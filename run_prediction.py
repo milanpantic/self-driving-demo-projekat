@@ -5,10 +5,13 @@ from tensorflow.keras.models import load_model
 import os
 import csv
 
+from plot_prediction_results import create_prediction_plot
+
 MODEL_PATH = "best_model.h5"
 CSV_PATH = "complete_dataset/merged/test.csv"
 OUTPUT_VIDEO_NAME = "rezultat_voznje_final.mp4"
 OUTPUT_CSV_NAME = "rezultati_predikcije.csv"
+OUTPUT_PLOT_NAME = "rezultati_predikcije_grafik.png"
 VIDEO_SEQUENCE_GROUP = "jungle_test_contiguous"
 VIDEO_FPS = 14.5
 SEQ_LENGTH = 4
@@ -155,4 +158,8 @@ if out_video is not None:
     out_video.release()
 csv_file.close()
 
-print(f"Gotovo! Snimak: {OUTPUT_VIDEO_NAME}, Podaci: {OUTPUT_CSV_NAME}")
+create_prediction_plot(OUTPUT_CSV_NAME, OUTPUT_PLOT_NAME, fps=VIDEO_FPS)
+print(
+    f"Gotovo! Snimak: {OUTPUT_VIDEO_NAME}, Podaci: {OUTPUT_CSV_NAME}, "
+    f"Grafikon: {OUTPUT_PLOT_NAME}"
+)
