@@ -1,117 +1,37 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-import os
-import cv2
-
-
-import cv2
-import numpy as np
-import pandas as pd
 import os
 import random
 
-def random_brightness(img):
-    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-    factor = 0.6 + np.random.rand() * 0.8   
-    hsv[:, :, 2] = np.clip(hsv[:, :, 2] * factor, 0, 255)
-    return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+import numpy as np
+import pandas as pd
 
-def random_shadow(img):
-    h, w = img.shape[:2]
-    x1, x2 = np.random.randint(0, w, 2)
-    shadow_mask = np.zeros((h, w), dtype=np.uint8)
-    shadow_mask[:, min(x1, x2):max(x1, x2)] = 1
-    alpha = 0.4 + np.random.rand() * 0.3
-    img_shadow = img.copy()
-    img_shadow[shadow_mask == 1] = (img_shadow[shadow_mask == 1] * alpha).astype(np.uint8)
-    return img_shadow
 
-def augment(img):
-    if np.random.rand() < 0.5:
-        img = random_brightness(img)
-    if np.random.rand() < 0.5:
-        img = random_shadow(img)
-    return img
+ANGLE_COL = 3
+SEQUENCE_GROUP_COL = 7
+SEGMENT_LENGTH = 100
+SEED = 42
 
-def augment_dataset_sequential(
-    input_csv,
-    output_csv,
-    aug_img_dir,
-    aug_ratio=0.15,
-    seed=42
+ 
+def fix_image_paths(
+    csv_path,
+    old_prefix="C:\\Users\\Andy\\Desktop\\",
+    new_prefix="complete_dataset/",
+    save_path=None,
 ):
-    random.seed(seed)
-    np.random.seed(seed)
-    os.makedirs(aug_img_dir, exist_ok=True)
-
-    df = pd.read_csv(input_csv, header=None)
-    new_rows = []
-
-    num_aug = int(len(df) * aug_ratio)
-    aug_indices = set(np.random.choice(len(df), num_aug, replace=False))
-
-    print(f"[AUG] Ukupno: {len(df)} | Augmentiramo: {num_aug} (~{aug_ratio*100:.0f}%)")
-
-    for i, row in df.iterrows():
-        img_path = row[0]
-
-         
-        new_rows.append(row.tolist())
-
-         
-        if i in aug_indices:
-            img = cv2.imread(img_path)
-            if img is None:
-                continue
-
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            aug_img = augment(img)
-
-            new_name = os.path.basename(img_path).replace(".jpg", "_aug.jpg")
-            new_path = os.path.join(aug_img_dir, new_name)
-
-            cv2.imwrite(new_path, cv2.cvtColor(aug_img, cv2.COLOR_RGB2BGR))
-
-            aug_row = row.tolist()
-            aug_row[0] = new_path   
-
-            new_rows.append(aug_row)
-
-    new_df = pd.DataFrame(new_rows)
-    new_df.to_csv(output_csv, index=False, header=False)
-
-    print(f"[AUG] Gotovo. Novi dataset: {len(new_df)} uzoraka")
-    print(f"[AUG] CSV sačuvan u: {output_csv}")
-
-def fix_image_paths(csv_path,
-                    old_prefix = "C:\\Users\\Andy\\Desktop\\",
-                    new_prefix="complete_dataset/",
-                    save_path=None):
-
     df = pd.read_csv(csv_path, header=None)
 
-    print(df.head())
-
-    path_columns = [0, 1, 2]
-
-    for col in path_columns:
-
+    for col in (0, 1, 2):
         df[col] = df[col].str.replace(old_prefix, new_prefix, regex=False)
-
         df[col] = df[col].str.replace("\\", "/", regex=False)
 
     if save_path is not None:
-        df.to_csv(save_path, index=False, header=None)
+        df.to_csv(save_path, index=False, header=False)
 
     return df
 
-def inspect_dataset(csv_path, plot_histogram=True):
 
+def inspect_dataset(csv_path):
     df = pd.read_csv(csv_path, header=None)
-
-    steering_col = 3
-
-    steering = df[steering_col]
+    steering = df[ANGLE_COL]
 
     print(f"Dataset: {csv_path}")
     print(f"Broj uzoraka: {len(df)}")
@@ -119,189 +39,199 @@ def inspect_dataset(csv_path, plot_histogram=True):
     print(f"Max ugao: {steering.max():.3f}")
     print(f"Mean: {steering.mean():.3f}")
     print(f"Std: {steering.std():.3f}")
+    print(f"Levo (<0): {(steering < 0).sum()}")
+    print(f"Pravo (==0): {(steering == 0).sum()}")
+    print(f"Desno (>0): {(steering > 0).sum()}")
 
-    n_left = (steering < 0).sum()
-    n_right = (steering > 0).sum()
-    n_zero = (steering == 0).sum()
-
-    print(f"Levo (<0): {n_left}")
-    print(f"Pravo (==0): {n_zero}")
-    print(f"Desno (>0): {n_right}")
+    if SEQUENCE_GROUP_COL in df.columns:
+        print(f"Broj vremenskih segmenata: {df[SEQUENCE_GROUP_COL].nunique()}")
 
     return df
 
-def reduce_zero(csv_path, steering_col=3):
-
-    df = pd.read_csv(csv_path, header=None)
-
-    left_right = df[df[steering_col] != 0]
-    zero = df[df[steering_col] == 0]
-
-    n_keep = len(left_right)
-    zero_reduced = zero.iloc[:n_keep]
-
-    df_new = pd.concat([left_right, zero_reduced], ignore_index=True)
-
-    return df_new
 
 def balance_make_dataset(
     csv_path,
-    img_root,
     out_csv,
-    out_img_dir,
     keep_zero_ratio=0.25,
-    angle_col=3
+    angle_col=ANGLE_COL,
+    seed=SEED,
 ):
-    os.makedirs(out_img_dir, exist_ok=True)
+    """Filter zeros without reordering rows; intended only for a single-frame CNN.
 
+    CNN+LSTM training keeps every chronological frame and balances complete
+    sequences in the generator instead, because removing frames creates time gaps.
+    """
     df = pd.read_csv(csv_path, header=None)
+    zero_indices = df.index[df[angle_col] == 0.0].to_numpy()
+    rng = np.random.default_rng(seed)
+    keep_count = int(len(zero_indices) * keep_zero_ratio)
+    kept_zero_indices = rng.choice(zero_indices, size=keep_count, replace=False)
 
-    zeros = df[df[angle_col] == 0.0]
-    left = df[df[angle_col] < 0.0]
-    right = df[df[angle_col] > 0.0]
+    keep_mask = (df[angle_col] != 0.0) | df.index.isin(kept_zero_indices)
+    balanced_df = df.loc[keep_mask].sort_index()
+    balanced_df.to_csv(out_csv, index=False, header=False)
 
     print(f"Pre: {len(df)}")
-    print(f"Levo: {len(left)}, Pravo: {len(zeros)}, Desno: {len(right)}")
+    print(f"Posle: {len(balanced_df)}")
+    print(f"Levo: {(balanced_df[angle_col] < 0).sum()}")
+    print(f"Pravo: {(balanced_df[angle_col] == 0).sum()}")
+    print(f"Desno: {(balanced_df[angle_col] > 0).sum()}")
+    return balanced_df
 
-    zeros_keep = zeros.iloc[:int(len(zeros) * keep_zero_ratio)]
 
-    new_rows = []
-    new_rows.extend(zeros_keep.values.tolist())
-    new_rows.extend(left.values.tolist())
-    new_rows.extend(right.values.tolist())
+def make_segments(df, source_name, segment_length=SEGMENT_LENGTH):
+    """Create chronological segments and store their ID in column 7."""
+    if segment_length < 4:
+        raise ValueError("Segment mora imati najmanje 4 frejma")
 
-  
-    for row in left.itertuples(index=False):
-        img_path = row[0]
-        angle = row[angle_col]
-
-        full_path = img_path
-        img = cv2.imread(full_path)
-        if img is None:
-            print('IMAGE IS NONE')
+    segments = []
+    for segment_number, start in enumerate(range(0, len(df), segment_length)):
+        segment = df.iloc[start:start + segment_length].copy()
+        if len(segment) < 4:
             continue
+        segment[SEQUENCE_GROUP_COL] = f"{source_name}_{segment_number:04d}"
+        segments.append(segment)
+    return segments
 
-        img_flipped = cv2.flip(img, 1)
 
-        new_name = os.path.basename(img_path).replace(".jpg", "_mirror.jpg")
-        new_path = os.path.join(out_img_dir, new_name)
+def _representative_contiguous_block_start(segments, block_size):
+    """Choose a continuous block whose angle distribution resembles its drive."""
+    complete_drive = pd.concat(segments, ignore_index=True)
+    complete_angles = complete_drive[ANGLE_COL]
+    target_distribution = np.array([
+        (complete_angles < 0).mean(),
+        (complete_angles == 0).mean(),
+        (complete_angles > 0).mean(),
+    ])
+    target_size = min(block_size * max(map(len, segments)), len(complete_drive))
 
-        cv2.imwrite(new_path, img_flipped)
+    best_start = 0
+    best_score = float("inf")
+    for start in range(len(segments) - block_size + 1):
+        candidate = pd.concat(segments[start:start + block_size], ignore_index=True)
+        angles = candidate[ANGLE_COL]
+        distribution = np.array([
+            (angles < 0).mean(),
+            (angles == 0).mean(),
+            (angles > 0).mean(),
+        ])
+        distribution_error = np.abs(distribution - target_distribution).sum()
+        size_error = abs(len(candidate) - target_size) / target_size
+        score = distribution_error + size_error
+        if score < best_score:
+            best_start = start
+            best_score = score
 
-        new_row = list(row)
-        new_row[0] = new_path
-        new_row[angle_col] = -angle
+    return best_start
 
-        new_rows.append(new_row)
 
-    new_df = pd.DataFrame(new_rows)
-    new_df.to_csv(out_csv, index=False, header=False)
-
-    print("Posle:", len(new_df))
-    print("Levo:", (new_df[angle_col] < 0).sum())
-    print("Pravo:", (new_df[angle_col] == 0).sum())
-    print("Desno:", (new_df[angle_col] > 0).sum())
-
-def reduce_straight_driving(
-    csv_path,
-    zero_keep_ratio=0.70,
-    angle_col=3,
-    save_path=None
+def _split_source_segments(
+    segments,
+    source_name,
+    train_ratio=0.70,
+    val_ratio=0.15,
+    test_ratio=0.15,
+    seed=SEED,
 ):
-    df = pd.read_csv(csv_path, header=None)
+    if not np.isclose(train_ratio + val_ratio + test_ratio, 1.0):
+        raise ValueError("Train/val/test odnosi moraju dati zbir 1.0")
+    if len(segments) < 3:
+        raise ValueError("Potrebna su najmanje tri segmenta po izvornoj vožnji")
 
-    zero_mask = df[angle_col] == 0.0
-    non_zero_df = df[~zero_mask]
-    zero_df = df[zero_mask]
+    n_val = max(1, round(len(segments) * val_ratio))
+    n_test = max(1, round(len(segments) * test_ratio))
+    test_start = _representative_contiguous_block_start(segments, n_test)
+    test_indices = np.arange(test_start, test_start + n_test)
 
-    keep_n = int(len(zero_df) * zero_keep_ratio)
-    zero_df_reduced = zero_df.iloc[:keep_n]   
+    indices = np.setdiff1d(np.arange(len(segments)), test_indices)
+    np.random.default_rng(seed).shuffle(indices)
+    n_train = len(indices) - n_val
+    if n_train < 1:
+        raise ValueError("Nema dovoljno segmenata za trening")
 
-    new_df = pd.concat([non_zero_df, zero_df_reduced], axis=0)
-    new_df = new_df.sort_index()   
+    test_block = pd.concat(
+        [segments[i] for i in test_indices],
+        ignore_index=True,
+    )
+    test_block[SEQUENCE_GROUP_COL] = f"{source_name}_test_contiguous"
 
-    print("Pre:", len(df))
-    print("Posle:", len(new_df))
-    print("Nule:", len(zero_df_reduced))
+    return {
+        "train": [segments[i] for i in indices[:n_train]],
+        "val": [segments[i] for i in indices[n_train:]],
+        "test": [test_block],
+    }
 
-    if save_path:
-        new_df.to_csv(save_path, index=False, header=False)
 
-    return new_df
+def prepare_segmented_split(
+    sources,
+    merged_csv,
+    train_csv,
+    val_csv,
+    test_csv,
+    segment_length=SEGMENT_LENGTH,
+    seed=SEED,
+):
+    """Split both drives by chronological segments, before any augmentation."""
+    random.seed(seed)
+    np.random.seed(seed)
+    all_segments = []
+    split_segments = {"train": [], "val": [], "test": []}
 
-def merge_datasets(csv_paths, out_csv):
-    dfs = []
+    for source_number, (source_name, csv_path) in enumerate(sources):
+        source_df = pd.read_csv(csv_path, header=None)
+        segments = make_segments(source_df, source_name, segment_length)
+        source_split = _split_source_segments(
+            segments,
+            source_name,
+            seed=seed + source_number * 1000,
+        )
+        all_segments.extend(segments)
+        for split_name in split_segments:
+            split_segments[split_name].extend(source_split[split_name])
 
-    for path in csv_paths:
-        df = pd.read_csv(path, header=None)
-        dfs.append(df)
+    merged_df = pd.concat(all_segments, ignore_index=True)
+    split_dfs = {
+        name: pd.concat(segments, ignore_index=True)
+        for name, segments in split_segments.items()
+    }
 
-    merged_df = pd.concat(dfs, axis=0, ignore_index=True)
+    merged_df.to_csv(merged_csv, index=False, header=False)
+    split_dfs["train"].to_csv(train_csv, index=False, header=False)
+    split_dfs["val"].to_csv(val_csv, index=False, header=False)
+    split_dfs["test"].to_csv(test_csv, index=False, header=False)
 
-    merged_df.to_csv(out_csv, index=False, header=False)
+    print(
+        f"[SPLIT] Train: {len(split_dfs['train'])} | "
+        f"Val: {len(split_dfs['val'])} | Test: {len(split_dfs['test'])}"
+    )
+    return split_dfs["train"], split_dfs["val"], split_dfs["test"]
 
-    print(f"✔ Spojeno {len(csv_paths)} dataset-a")
-    print(f"✔ Ukupno uzoraka: {len(merged_df)}")
-
-    return merged_df
 
 def main():
-    input_csv_jungle = "complete_dataset/self_driving_car_dataset_jungle/driving_log.csv"
-    output_csv_jungle = "complete_dataset/self_driving_car_dataset_jungle/driving_log_fixed.csv"
+    jungle_raw = "complete_dataset/self_driving_car_dataset_jungle/driving_log.csv"
+    jungle_fixed = "complete_dataset/self_driving_car_dataset_jungle/driving_log_fixed.csv"
+    lake_raw = "complete_dataset/self_driving_car_dataset/driving_log.csv"
+    lake_fixed = "complete_dataset/self_driving_car_dataset/driving_log_fixed.csv"
+    merged_dir = "complete_dataset/merged"
+    os.makedirs(merged_dir, exist_ok=True)
 
-    input_csv_lake = "complete_dataset/self_driving_car_dataset/driving_log.csv"
-    output_csv_lake = "complete_dataset/self_driving_car_dataset/driving_log_fixed.csv"
-    
-    df = fix_image_paths(
-        csv_path=input_csv_jungle,
-        save_path=output_csv_jungle
+    fix_image_paths(jungle_raw, save_path=jungle_fixed)
+    fix_image_paths(lake_raw, save_path=lake_fixed)
+
+    prepare_segmented_split(
+        sources=[("jungle", jungle_fixed), ("lake", lake_fixed)],
+        merged_csv=os.path.join(merged_dir, "driving_log_merged.csv"),
+        train_csv=os.path.join(merged_dir, "train.csv"),
+        val_csv=os.path.join(merged_dir, "val.csv"),
+        test_csv=os.path.join(merged_dir, "test.csv"),
+        segment_length=SEGMENT_LENGTH,
+        seed=SEED,
     )
 
-    df = fix_image_paths(
-        csv_path=input_csv_lake,
-        save_path=output_csv_lake
-    )
+    inspect_dataset(os.path.join(merged_dir, "train.csv"))
+    inspect_dataset(os.path.join(merged_dir, "val.csv"))
+    inspect_dataset(os.path.join(merged_dir, "test.csv"))
 
-    inspect_dataset(output_csv_jungle)
-    inspect_dataset(output_csv_lake)
-
-    reduce_straight_driving(
-    "complete_dataset/self_driving_car_dataset_jungle/driving_log_fixed.csv",
-    zero_keep_ratio=0.70,
-    save_path="complete_dataset/self_driving_car_dataset_jungle/driving_log_reduced.csv"
-    )
-
-    balance_make_dataset(
-    csv_path="complete_dataset/self_driving_car_dataset/driving_log_fixed.csv",
-    img_root="complete_dataset/self_driving_car_dataset",
-    out_csv="complete_dataset/self_driving_car_dataset/driving_log_balanced.csv",
-    out_img_dir="complete_dataset/self_driving_car_dataset/mirrored",
-    keep_zero_ratio=0.25
-    )
-    
-    inspect_dataset("complete_dataset/self_driving_car_dataset_jungle/driving_log_reduced.csv")
-    inspect_dataset("complete_dataset/self_driving_car_dataset/driving_log_balanced.csv")
-
-    merged_csv = "complete_dataset/merged/driving_log_merged.csv"
-    os.makedirs("complete_dataset/merged", exist_ok=True)
-
-    merge_datasets(
-    csv_paths=[
-        "complete_dataset/self_driving_car_dataset_jungle/driving_log_reduced.csv",
-        "complete_dataset/self_driving_car_dataset/driving_log_balanced.csv"
-    ],
-    out_csv=merged_csv
-    )
-
-    inspect_dataset(merged_csv) 
-
-
-    augment_dataset_sequential(
-        input_csv="complete_dataset/merged/driving_log_merged.csv",
-        output_csv="complete_dataset/merged/driving_log_augmented.csv",
-        aug_img_dir="complete_dataset/merged/augmented",
-        aug_ratio=0.15
-    )
 
 if __name__ == "__main__":
     main()
