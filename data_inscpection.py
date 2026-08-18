@@ -14,19 +14,26 @@ MERGED_DIR = "complete_dataset/merged"
 
 
 def fix_image_paths(csv_path, save_path):
+    """Menja stare Windows putanje putanjama koje koristi projekat."""
     df = pd.read_csv(csv_path, header=None)
     old_prefix = "C:\\Users\\Andy\\Desktop\\"
 
-    for col in (0, 1, 2):
-        df[col] = df[col].str.replace(old_prefix, "complete_dataset/", regex=False)
-        df[col] = df[col].str.replace("\\", "/", regex=False)
+    for column in [0, 1, 2]:
+        df[column] = df[column].str.replace(
+            old_prefix,
+            "complete_dataset/",
+            regex=False,
+        )
+        df[column] = df[column].str.replace("\\", "/", regex=False)
 
     df.to_csv(save_path, index=False, header=False)
     return df
 
 
 def print_dataset_info(name, df):
+    """Ispisuje osnovnu statistiku uglova."""
     angles = df[ANGLE_COL]
+
     print(f"Dataset: {name}")
     print(f"Broj uzoraka: {len(df)}")
     print(f"Min ugao: {angles.min():.3f}")
@@ -39,122 +46,163 @@ def print_dataset_info(name, df):
     print(f"Broj vremenskih segmenata: {df[GROUP_COL].nunique()}")
 
 
-def make_segments(df, source_name):
+def create_segments(df, source_name):
+    """Deli jednu vožnju na hronološke segmente od po 100 frejmova."""
     segments = []
-    for number, start in enumerate(range(0, len(df), SEGMENT_LENGTH)):
-        segment = df.iloc[start:start + SEGMENT_LENGTH].copy()
-        if len(segment) < 4:
-            continue
-        segment[GROUP_COL] = f"{source_name}_{number:04d}"
-        segments.append(segment)
+    segment_number = 0
+
+    for start in range(0, len(df), SEGMENT_LENGTH):
+        end = start + SEGMENT_LENGTH
+        segment = df.iloc[start:end].copy()
+
+        if len(segment) >= 4:
+            segment[GROUP_COL] = f"{source_name}_{segment_number:04d}"
+            segments.append(segment)
+
+        segment_number += 1
+
     return segments
 
 
-def angle_distribution(df):
+def get_angle_distribution(df):
+    """Vraća udeo levih, pravih i desnih uglova."""
     angles = df[ANGLE_COL]
-    return np.array([
-        (angles < 0).mean(),
-        (angles == 0).mean(),
-        (angles > 0).mean(),
-    ])
+    left_ratio = (angles < 0).mean()
+    straight_ratio = (angles == 0).mean()
+    right_ratio = (angles > 0).mean()
+    return left_ratio, straight_ratio, right_ratio
 
 
-def find_representative_test_start(segments, block_count):
-    """Find a continuous block similar to the complete drive."""
+def find_test_start(segments, number_of_test_segments):
+    """Bira kontinuirani test blok sličan celoj vožnji."""
     complete_drive = pd.concat(segments, ignore_index=True)
-    target_distribution = angle_distribution(complete_drive)
-    target_size = block_count * SEGMENT_LENGTH
+    target_left, target_straight, target_right = get_angle_distribution(complete_drive)
 
     best_start = 0
     best_score = float("inf")
+    expected_size = number_of_test_segments * SEGMENT_LENGTH
+    last_possible_start = len(segments) - number_of_test_segments
 
-    for start in range(len(segments) - block_count + 1):
-        candidate = pd.concat(segments[start:start + block_count], ignore_index=True)
-        distribution_error = np.abs(
-            angle_distribution(candidate) - target_distribution
-        ).sum()
-        size_error = abs(len(candidate) - target_size) / target_size
+    for start in range(last_possible_start + 1):
+        end = start + number_of_test_segments
+        candidate = pd.concat(segments[start:end], ignore_index=True)
+        left, straight, right = get_angle_distribution(candidate)
+
+        distribution_error = (
+            abs(left - target_left)
+            + abs(straight - target_straight)
+            + abs(right - target_right)
+        )
+        size_error = abs(len(candidate) - expected_size) / expected_size
         score = distribution_error + size_error
 
         if score < best_score:
-            best_start = start
             best_score = score
+            best_start = start
 
     return best_start
 
 
 def split_drive(df, source_name, seed):
-    segments = make_segments(df, source_name)
-    n_val = max(1, round(len(segments) * VAL_RATIO))
-    n_test = max(1, round(len(segments) * TEST_RATIO))
+    """Pravi train, validation i jedan kontinuirani test deo jedne vožnje."""
+    segments = create_segments(df, source_name)
+    number_of_val_segments = max(1, round(len(segments) * VAL_RATIO))
+    number_of_test_segments = max(1, round(len(segments) * TEST_RATIO))
 
-    test_start = find_representative_test_start(segments, n_test)
-    test_indices = np.arange(test_start, test_start + n_test)
-    remaining_indices = np.setdiff1d(np.arange(len(segments)), test_indices)
-    np.random.default_rng(seed).shuffle(remaining_indices)
+    test_start = find_test_start(segments, number_of_test_segments)
+    test_end = test_start + number_of_test_segments
 
-    n_train = len(remaining_indices) - n_val
-    test_block = pd.concat(
-        [segments[index] for index in test_indices],
-        ignore_index=True,
+    remaining_indices = []
+    for index in range(len(segments)):
+        if index < test_start or index >= test_end:
+            remaining_indices.append(index)
+
+    remaining_indices = np.array(remaining_indices)
+    random_generator = np.random.default_rng(seed)
+    random_generator.shuffle(remaining_indices)
+
+    number_of_train_segments = len(remaining_indices) - number_of_val_segments
+    train_segments = []
+    val_segments = []
+
+    for position, segment_index in enumerate(remaining_indices):
+        if position < number_of_train_segments:
+            train_segments.append(segments[segment_index])
+        else:
+            val_segments.append(segments[segment_index])
+
+    test_segments = segments[test_start:test_end]
+    test_df = pd.concat(test_segments, ignore_index=True)
+    test_df[GROUP_COL] = f"{source_name}_test_contiguous"
+
+    return segments, train_segments, val_segments, test_df
+
+
+def create_and_save_splits(jungle_df, lake_df):
+    """Spaja delove obe vožnje i čuva završne CSV fajlove."""
+    jungle_all, jungle_train, jungle_val, jungle_test = split_drive(
+        jungle_df,
+        "jungle",
+        SEED,
     )
-    test_block[GROUP_COL] = f"{source_name}_test_contiguous"
+    lake_all, lake_train, lake_val, lake_test = split_drive(
+        lake_df,
+        "lake",
+        SEED + 1000,
+    )
 
-    split = {
-        "train": [segments[index] for index in remaining_indices[:n_train]],
-        "val": [segments[index] for index in remaining_indices[n_train:]],
-        "test": [test_block],
-    }
-    return segments, split
+    all_segments = jungle_all + lake_all
+    train_segments = jungle_train + lake_train
+    val_segments = jungle_val + lake_val
 
-
-def create_splits(sources):
-    all_segments = []
-    split_segments = {"train": [], "val": [], "test": []}
-
-    for source_number, (source_name, source_df) in enumerate(sources):
-        segments, source_split = split_drive(
-            source_df,
-            source_name,
-            seed=SEED + source_number * 1000,
-        )
-        all_segments.extend(segments)
-        for split_name in split_segments:
-            split_segments[split_name].extend(source_split[split_name])
-
-    datasets = {
-        "driving_log_merged": pd.concat(all_segments, ignore_index=True),
-        **{
-            name: pd.concat(segments, ignore_index=True)
-            for name, segments in split_segments.items()
-        },
-    }
+    merged_df = pd.concat(all_segments, ignore_index=True)
+    train_df = pd.concat(train_segments, ignore_index=True)
+    val_df = pd.concat(val_segments, ignore_index=True)
+    test_df = pd.concat([jungle_test, lake_test], ignore_index=True)
 
     os.makedirs(MERGED_DIR, exist_ok=True)
-    for name, df in datasets.items():
-        df.to_csv(os.path.join(MERGED_DIR, f"{name}.csv"), index=False, header=False)
+    merged_df.to_csv(
+        os.path.join(MERGED_DIR, "driving_log_merged.csv"),
+        index=False,
+        header=False,
+    )
+    train_df.to_csv(
+        os.path.join(MERGED_DIR, "train.csv"),
+        index=False,
+        header=False,
+    )
+    val_df.to_csv(
+        os.path.join(MERGED_DIR, "val.csv"),
+        index=False,
+        header=False,
+    )
+    test_df.to_csv(
+        os.path.join(MERGED_DIR, "test.csv"),
+        index=False,
+        header=False,
+    )
 
     print(
-        f"[SPLIT] Train: {len(datasets['train'])} | "
-        f"Val: {len(datasets['val'])} | Test: {len(datasets['test'])}"
+        f"[SPLIT] Train: {len(train_df)} | "
+        f"Val: {len(val_df)} | Test: {len(test_df)}"
     )
-    return datasets
+    return train_df, val_df, test_df
 
 
 def main():
-    jungle = fix_image_paths(
+    jungle_df = fix_image_paths(
         "complete_dataset/self_driving_car_dataset_jungle/driving_log.csv",
         "complete_dataset/self_driving_car_dataset_jungle/driving_log_fixed.csv",
     )
-    lake = fix_image_paths(
+    lake_df = fix_image_paths(
         "complete_dataset/self_driving_car_dataset/driving_log.csv",
         "complete_dataset/self_driving_car_dataset/driving_log_fixed.csv",
     )
 
-    datasets = create_splits([("jungle", jungle), ("lake", lake)])
-    print_dataset_info("train.csv", datasets["train"])
-    print_dataset_info("val.csv", datasets["val"])
-    print_dataset_info("test.csv", datasets["test"])
+    train_df, val_df, test_df = create_and_save_splits(jungle_df, lake_df)
+    print_dataset_info("train.csv", train_df)
+    print_dataset_info("val.csv", val_df)
+    print_dataset_info("test.csv", test_df)
 
 
 if __name__ == "__main__":
