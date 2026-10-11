@@ -31,7 +31,7 @@ BATCH_SIZE = 32
 EPOCHS = 20
 IMG_HEIGHT = 66
 IMG_WIDTH = 200
-SEQ_LENGTH = 4
+SEQ_LENGTH = 5
 ANGLE_COL = 3
 GROUP_COL = 7
 SEED = 42
@@ -172,8 +172,9 @@ def build_model():
     inputs = Input(shape=(SEQ_LENGTH, IMG_HEIGHT, IMG_WIDTH, 3))
     x = TimeDistributed(Conv2D(16, (5, 5), strides=(2, 2), activation="relu"))(inputs)
     x = TimeDistributed(Conv2D(32, (3, 3), strides=(2, 2), activation="relu"))(x)
+    x = TimeDistributed(Conv2D(32, (3, 3), strides=(2, 2), activation="relu"))(x)
     x = TimeDistributed(Flatten())(x)
-    x = LSTM(64)(x)
+    x = LSTM(32)(x)
     x = Dropout(0.3)(x)
     x = Dense(32, activation="relu")(x)
     outputs = Dense(1, activation="tanh")(x)
@@ -238,12 +239,12 @@ def main():
     model = build_model()
     checkpoint = ModelCheckpoint(
         "best_model.h5",
-        monitor="val_loss",
+        monitor="val_mae",
         save_best_only=True,
     )
     early_stopping = EarlyStopping(
-        monitor="val_loss",
-        patience=10,
+        monitor="val_mae",
+        patience=5,
         restore_best_weights=True,
     )
 

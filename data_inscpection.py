@@ -55,7 +55,7 @@ def create_segments(df, source_name):
         end = start + SEGMENT_LENGTH
         segment = df.iloc[start:end].copy()
 
-        if len(segment) >= 4:
+        if len(segment) >= 5:
             segment[GROUP_COL] = f"{source_name}_{segment_number:04d}"
             segments.append(segment)
 

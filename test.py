@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-SEQ_LENGTH = 4
+SEQ_LENGTH = 5
 GROUP_COL = 7
 
 
