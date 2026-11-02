@@ -261,7 +261,7 @@ def main():
     print(f"Trajanje treninga ({device_name}): {duration:.1f} s ({duration / 60:.2f} min)")
     print(f"Prosečno po epohi: {duration / len(history.history['loss']):.1f} s")
 
-    best_model = load_model("best_model.h5")
+    best_model = load_model("best_model.h5", compile=False)
     evaluate_model(best_model, test_df)
     best_model.save("final_cnn_lstm_model.h5")
     print("Trening završen.")

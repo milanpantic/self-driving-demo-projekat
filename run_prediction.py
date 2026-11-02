@@ -220,7 +220,7 @@ def main():
         return
 
     print("Učitavam model i podatke...")
-    model = load_model(MODEL_PATH)
+    model = load_model(MODEL_PATH, compile=False)
     df, image_paths, actual_angles, sequence_groups = load_data()
 
     print(
