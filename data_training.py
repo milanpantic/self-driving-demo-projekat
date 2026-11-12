@@ -1,9 +1,10 @@
 import math
 import os
 import time
+from functools import lru_cache
 
 
-USE_GPU = True
+USE_GPU = False
 if not USE_GPU:
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
@@ -27,7 +28,7 @@ from tensorflow.keras.optimizers import Adam
 TRAIN_CSV = "complete_dataset/merged/train.csv"
 VAL_CSV = "complete_dataset/merged/val.csv"
 TEST_CSV = "complete_dataset/merged/test.csv"
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 EPOCHS = 20
 IMG_HEIGHT = 66
 IMG_WIDTH = 200
@@ -44,7 +45,8 @@ def load_dataset(csv_path):
     return df
 
 
-def load_image(image_path):
+@lru_cache(maxsize=20_000)
+def _read_image(image_path):
     image = cv2.imread(image_path)
     if image is None:
         raise FileNotFoundError(f"Slika nije pronađena: {image_path}")
@@ -52,7 +54,11 @@ def load_image(image_path):
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image = image[60:135]
     image = cv2.resize(image, (IMG_WIDTH, IMG_HEIGHT))
-    return image.astype(np.float32) / 255.0
+    return image
+
+
+def load_image(image_path):
+    return _read_image(image_path).astype(np.float32) / 255.0
 
 
 def find_valid_sequence_starts(df):
